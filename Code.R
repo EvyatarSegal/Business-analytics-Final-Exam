@@ -1,19 +1,23 @@
 library(infotheo)
 library(tidyr)
 library(dplyr)
-library(infotheo)
 library(stargazer)
 library(rpart)
 library(rpart.plot)
 library(FNN)
 library(caret)
-library(caret)
 library("e1071")
 library(class)
 library(knitr)
+library(ggplot2) # Moved up for safety
+library(reshape2) # Moved up for safety
+
+# Create a directory for plots if it doesn't exist
+if (!dir.exists("plots")) {
+  dir.create("plots")
+}
 
 data = read.csv("hotel.csv")
-
 
 str(data)
 summary(data)
@@ -81,7 +85,7 @@ calculate_model_accuracy <- function(
   Weights <- model_accuracies / sum(model_accuracies)
   
   # Output weights for reference
-  #message("Model weights: ", paste(round(Weights, 4), collapse = ", "))
+  message("Model weights: ", paste(round(Weights, 4), collapse = ", "))
   
   #==== OUT-OF-SAMPLE (TEST) ACCURACY ====
   
@@ -400,19 +404,22 @@ for (n in seq(1:5)){
   test = df[-train_index,]
   
   #check for the distribution of the is_canceled variable
-  hist(train$is_canceled)
+  # --- SAVE PLOT 1 ---
+  png(filename = paste0("plots/Fold_", n, "_1_Histogram_IsCanceled.png"), width = 800, height = 600)
+  hist(train$is_canceled, main = paste("Histogram of Cancellations - Fold", n))
+  dev.off()
   
   
   ### tree - rpart 
   tree0 = rpart(is_canceled ~ ., data = train, 
                 method = "class", ## this is a regression tree!
                 parms = list(split = "information") )
-  rpart.plot(tree0)
   
-
+  # --- SAVE PLOT 2 ---
+  png(filename = paste0("plots/Fold_", n, "_2_Tree_Initial.png"), width = 1000, height = 800)
+  rpart.plot(tree0, main = paste("Initial Tree - Fold", n))
+  dev.off()
   
-  library(rpart)
-  library(rpart.plot)
   
   ## Now we will find the best settings for our tree prediction
   
@@ -462,20 +469,22 @@ for (n in seq(1:5)){
   
   results_table$Best_Depth[n] = best_Depth
   
-  library(ggplot2)
   
   write.csv(Acc,"AccuracyInOut.csv")
   
-  
-  library(reshape2)
   
   meltedAcc= melt(Acc[, c(1,2,3)], id.vars = "Depth", 
                   variable.name = "Type", value.name = "Accuracy")
   
   ## we needed the melted df for plotting:
-  ggplot(meltedAcc, aes(x=Depth,y=Accuracy, color = Type)) +
+  # --- SAVE PLOT 3 ---
+  png(filename = paste0("plots/Fold_", n, "_3_Depth_Accuracy.png"), width = 800, height = 600)
+  p <- ggplot(meltedAcc, aes(x=Depth,y=Accuracy, color = Type)) +
     geom_point() + geom_line() + 
-    scale_x_discrete(limits = factor(1:15))
+    scale_x_discrete(limits = factor(1:15)) +
+    labs(title = paste("Tree Depth Accuracy - Fold", n))
+  print(p)
+  dev.off()
   
   ## Now we will make a model with the best depth - best_Depth, where the Insample and Outsample where close and highest
   
@@ -483,7 +492,11 @@ for (n in seq(1:5)){
                           method = "class", ## this is a regression tree!
                           parms = list(split = "information"),
                           control = rpart.control(maxdepth = 7, cp = 0.001) )
-  rpart.plot(tree_best_Depth)
+  
+  # --- SAVE PLOT 4 ---
+  png(filename = paste0("plots/Fold_", n, "_4_Tree_Best_Depth.png"), width = 1000, height = 800)
+  rpart.plot(tree_best_Depth, main = paste("Best Depth Tree - Fold", n))
+  dev.off()
   
   tree_best_Depth_pred = predict(tree_best_Depth, newdata = test, type = "class")
   
@@ -518,12 +531,16 @@ for (n in seq(1:5)){
   print(threshold_results$all_results)
   
   # Plot threshold vs metric
-  library(ggplot2)
-  ggplot(threshold_results$all_results, aes(x = threshold, y = !!sym(threshold_results$metric_used))) +
+  # --- SAVE PLOT 5 ---
+  png(filename = paste0("plots/Fold_", n, "_5_GLM_Threshold.png"), width = 800, height = 600)
+  p2 <- ggplot(threshold_results$all_results, aes(x = threshold, y = !!sym(threshold_results$metric_used))) +
     geom_line() +
     geom_vline(xintercept = optimal_threshold, color = "red", linetype = "dashed") +
-    labs(title = paste("Threshold Optimization for", threshold_results$metric_used),
+    labs(title = paste("Threshold Optimization for", threshold_results$metric_used, "- Fold", n),
          y = threshold_results$metric_used)
+  print(p2)
+  dev.off()
+  
   log_prob =  predict(m.logit0, factored_test, type = "response")
   log_pred_binary = ifelse(log_prob > optimal_threshold, 1, 0)
   
@@ -558,9 +575,12 @@ for (n in seq(1:5)){
   }
   
   # Plot accuracy vs k
+  # --- SAVE PLOT 6 ---
+  png(filename = paste0("plots/Fold_", n, "_6_KNN_Accuracy.png"), width = 800, height = 600)
   plot(k_values, k_accuracies[,2], type = "b", 
        xlab = "k Value", ylab = "Accuracy",
-       main = "KNN Accuracy by k Value")
+       main = paste("KNN Accuracy by k Value - Fold", n))
+  dev.off()
   
   # Step 1: Compute the overfit gap
   k_accuracies$Gap <- abs(k_accuracies$In_acc - k_accuracies$Out_acc)
@@ -675,13 +695,15 @@ for (n in seq(1:5)){
   best_final_threshold <- accuracy_df[which(accuracy_df$OutOfSample == max(accuracy_df$OutOfSample, na.rm = TRUE))[1], 1]
   best_final_threshold_insample <- accuracy_df[which(accuracy_df$InSample == max(accuracy_df$InSample, na.rm = TRUE))[1], 1]
   # Plotting the accuracies using ggplot2
-  ggplot(accuracy_df, aes(x = Threshold)) +
+  # --- SAVE PLOT 7 ---
+  png(filename = paste0("plots/Fold_", n, "_7_In_vs_Out_Accuracy.png"), width = 800, height = 600)
+  p3 <- ggplot(accuracy_df, aes(x = Threshold)) +
     geom_line(aes(y = InSample, color = "In-Sample Accuracy")) +
     geom_point(aes(y = InSample, color = "In-Sample Accuracy")) +
     geom_line(aes(y = OutOfSample, color = "Out-of-Sample Accuracy")) +
     geom_point(aes(y = OutOfSample, color = "Out-of-Sample Accuracy")) +
     labs(
-      title = "In-Sample vs. Out-of-Sample Accuracy Across Thresholds",
+      title = paste("In-Sample vs. Out-of-Sample Accuracy - Fold", n),
       x = "Prediction Threshold",
       y = "Accuracy",
       color = "Accuracy Type"
@@ -692,17 +714,20 @@ for (n in seq(1:5)){
     )) +
     theme_minimal() +
     theme(legend.position = "bottom")
-  
+  print(p3)
+  dev.off()
   
   ## Zooming in
   # Plotting the accuracies using ggplot2
-  ggplot(accuracy_df, aes(x = Threshold)) +
+  # --- SAVE PLOT 8 ---
+  png(filename = paste0("plots/Fold_", n, "_8_Zoomed_Accuracy.png"), width = 800, height = 600)
+  p4 <- ggplot(accuracy_df, aes(x = Threshold)) +
     geom_line(aes(y = InSample, color = "In-Sample Accuracy")) +
     geom_point(aes(y = InSample, color = "In-Sample Accuracy")) +
     geom_line(aes(y = OutOfSample, color = "Out-of-Sample Accuracy")) +
     geom_point(aes(y = OutOfSample, color = "Out-of-Sample Accuracy")) +
     labs(
-      title = "In-Sample vs. Out-of-Sample Accuracy Across Thresholds",
+      title = paste("Zoomed In Accuracy - Fold", n),
       x = "Prediction Threshold",
       y = "Accuracy",
       color = "Accuracy Type"
@@ -715,6 +740,9 @@ for (n in seq(1:5)){
     theme(legend.position = "bottom") +
     
     xlim(0.1, 0.5)
+  print(p4)
+  dev.off()
+  
   ### As we can see the optimal threshold is between 0.2 and 0.4
   ## we will re-run the functions with this in mind
   
@@ -804,10 +832,15 @@ for (n in seq(1:5)){
   
   ### Run the model on all the data #########
   Final_tree = rpart(is_canceled ~ ., data = df, 
-                    method = "class", ## this is a regression tree!
-                    parms = list(split = "information"),
-                    control = rpart.control(maxdepth = 7, cp = 0.001) )
-  rpart.plot(Final_tree)
+                     method = "class", ## this is a regression tree!
+                     parms = list(split = "information"),
+                     control = rpart.control(maxdepth = 7, cp = 0.001) )
+  
+  # --- SAVE PLOT 9 ---
+  png(filename = paste0("plots/Fold_", n, "_9_Final_Fold_Tree.png"), width = 1000, height = 800)
+  rpart.plot(Final_tree, main = paste("Final Tree for Fold", n))
+  dev.off()
+  
   Final_tree_pred = predict(Final_tree, newdata = df, type = "class")
   
   nCorrect_FTree = sum(1*(df$is_canceled == Final_tree_pred) )
@@ -896,7 +929,12 @@ Final_tree = rpart(is_canceled ~ ., data = df,
                    method = "class", ## this is a regression tree!
                    parms = list(split = "information"),
                    control = rpart.control(maxdepth = 8, cp = 0.001) )
-rpart.plot(Final_tree)
+
+# --- SAVE FINAL TREE PLOT ---
+png(filename = "plots/Final_Global_Tree.png", width = 1200, height = 900)
+rpart.plot(Final_tree, main = "Final Global Decision Tree")
+dev.off()
+
 Final_tree_pred = predict(Final_tree, newdata = df, type = "class")
 
 nCorrect_FTree = sum(1*(df$is_canceled == Final_tree_pred) )
