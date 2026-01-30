@@ -382,14 +382,6 @@ results_table$Weights_Vector <- vector("list", k)
 folds <- createFolds(df$is_canceled, k = k, list = TRUE, returnTrain = FALSE)
 
 
-### Hi Raanan! If you see this that means for some reason you decided to run my code.
-### First off all: My condolences, secondly: at the start of the main loop theres the line
-### "for (n in seq(1:5)){" 
-### PLEASE REPLACE IT WITH:
-###"for (n in seq(1:1)){"
-### this should cut the run time to 15 minutes instead of 45
-
-
 for (n in seq(1:5)){
   results_table$Fold[n] = n
   test_index <- folds[[n]]
